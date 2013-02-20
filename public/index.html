@@ -1,0 +1,29 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html>
+<head>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/jquery-1.9.1.min.js" type="text/javascript"></script>
+    <script src="/jquery-migrate-1.1.0.min.js" type="text/javascript"></script>
+    <script src="/jquery.ba-hashchange.min.js" type="text/javascript"></script>
+    <script src="/coffee-script.js" type="text/javascript" ></script>
+
+    <script src="/socket.io/socket.io.js" type="text/javascript"></script>
+    <script src="/frontend.coffee" type="text/coffeescript"></script>
+</head>
+
+<body>
+
+<div>
+    <label>Blog:<input type="text" id="blog" value="neo4j-test"></label>
+    <button id="add-likes">Add Likes</button>
+    <button id="show">Show-Blog</button>
+    <!--<button id="stop">Stop-Fetching</button>-->
+</div>
+
+<div id="loader">please wait: loading ...</div>
+
+<p id="image-display"/>
+
+<p id="log"/>
+
+</body>

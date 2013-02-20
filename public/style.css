@@ -1,0 +1,37 @@
+#log pre {
+    margin: 0;
+    border: 1px solid white;
+    background: #eee;
+    padding: 0 0 0 13px;
+}
+
+#log pre.active {
+    background: #eee url("ajax-loader.gif") no-repeat 1px 2px;
+}
+
+#loader {
+    position: absolute;
+    top: 10px;
+    right: 0;
+    left: 0;
+    float: right;
+    font-size: 20px;
+    color: green;
+    border: 3px solid green;
+    padding: 5px;
+    background: white;
+    text-align: center;
+    width: 300px;
+    margin: 0 auto;
+}
+
+.image {
+    display: inline-block;
+}
+
+.references {
+    display: inline-block;
+    position: absolute;
+    background: #fff;
+}
+
