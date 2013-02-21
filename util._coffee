@@ -114,6 +114,8 @@ fetch_post = (_, blog_name, post_id, logger) ->
 
 module.exports =
   query: (cypher, params, _)->
+    console.log cypher
+    console.log params
     db.query cypher, params, _
 
   fetch_post: fetch_post
