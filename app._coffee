@@ -54,8 +54,8 @@ io.sockets.on "connection", (socket, _) ->
                   recommend: util.query("START my_blog=node:blog(blog={blog}) " +
                                         "MATCH my_blog-[:reblog|like|post]->my_post<-[:blog|like|reblog]-other_blog, " +
                                         " other_blog-[:blog|like|reblog]->post " +
-#                                        " ,known_post=(my_blog)-[?:reblog|like|post]->post, pn=(post)-[?:is_reblog]->() WHERE length(pn) <> 1 AND length(known_post) <> 1 " +
-                                        " WHERE NOT((post)-[:is_reblog]->()) AND NOT( (my_blog)-[:reblog|like|post]->(post) ) " +
+                                        " ,known_post=(my_blog)-[?:reblog|like|post]->post, pn=(post)-[?:is_reblog]->() WHERE length(pn) <> 1 AND length(known_post) <> 1 " +
+#                                        " WHERE NOT((post)-[:is_reblog]->()) AND NOT( (my_blog)-[:reblog|like|post]->(post) ) " +
                                         "WITH post,count(*) as c " +
                                         "MATCH blog-[:post]->post-[:photo]->p " +
                                         "WHERE has(p.url) " +
@@ -64,8 +64,8 @@ io.sockets.on "connection", (socket, _) ->
 
                   posts: util.query("START my_blog=node:blog(blog={blog}) " +
                                     "MATCH my_blog-[:reblog|like|post]->(post) " +
-#                                    ", pn=(post)-[?:is_reblog]->() WHERE length(pn) <> 1 " +
-                                    " WHERE NOT((post)-[:is_reblog]->()) " +
+                                    ", pn=(post)-[?:is_reblog]->() WHERE length(pn) <> 1 " +
+#                                    " WHERE NOT((post)-[:is_reblog]->()) " +
                                     "WITH post,count(*) as c " +
                                     "MATCH blog-[:post]->post-[:photo]->p " +
                                     "WHERE has(p.url) " +
@@ -80,8 +80,8 @@ io.sockets.on "connection", (socket, _) ->
       socket.emit "show",
                   post: util.query("START my_post=node:post(post={post}) " +
                                    "MATCH my_post<-[:blog|like|reblog]-other_blog-[:blog|like|reblog]->post" +
-#                                   ", pn=(post)-[?:is_reblog]->() WHERE length(pn) <> 1 " +
-                                   " WHERE NOT((post)-[:is_reblog]->()) " +
+                                   ", pn=(post)-[?:is_reblog]->() WHERE length(pn) <> 1 " +
+#                                   " WHERE NOT((post)-[:is_reblog]->()) " +
                                    "WITH post,count(*) as c " +
                                    "MATCH blog-[:post]->post-[:photo]->p " +
                                    "WHERE has(p.url) " +
