@@ -1,6 +1,7 @@
 "use strict"
 
 neo4j = require("neo4j")
+Node = require("neo4j/lib/Node")
 db = new neo4j.GraphDatabase(process.env.NEO4J_URL or "http://localhost:7474")
 
 console.log "using neo4j-server: " + db.url
@@ -11,38 +12,30 @@ pool = require("./pool._coffee")
 my_id = 0
 
 make_id = ->
-  my_id++
-  new Date().getTime() + "_" + my_id
+  new Date().getTime() + "_" + (my_id++)
 
-getNode = (type, id, _) ->
-  try
-    return db.getIndexedNode(type, type, id, _)
-  catch error
-    return null  if error.message.exception is "NotFoundException"
-    throw error
+getOrCreateNode = (index, key, data, _) ->
+  node = JSON.stringify key: key, value: data[key], properties: data
+  response = db._request.post uri: db.url + "/db/data/index/node/#{index}?unique", body: node, _
+  db.getNode response.body.self, _
+#  result = db.query "START n=node:node_auto_index(#{key}={id}) WITH count(*) as c " +
+#                    "FOREACH(x in FILTER(v in [c] : c = 0) : CREATE n={data}) WITH c " +
+#                    "START n=node:node_auto_index(#{key}={id}) RETURN n",
+#                    id: data[key], data: data, _
+#  result[0].n
 
-getOrCreateNode = (type, id, data, _) ->
-  node = getNode(type, id, _)
-  return node if node?
 
-  node = db.createNode(data).save(_)
-  try
-    node.index type + "?unique", type, id, _
-    return node
-  catch error
-    node.del _
-    return db.getNode(error.message.indexed, _)
 
 
 getOrCreateBlog = (blog_name, _)->
-  getOrCreateNode("blog", blog_name, {_type: "blog", name: blog_name}, _)
+  getOrCreateNode "blog", "name", name: blog_name, _type: "blog",_
 
 getOrCreatePost = (post, _)->
-  post_node = getOrCreateNode "post", post.id, {id: post.id, type: post.type, timestamp: post.timestamp, _type: "post"}, _
-  blog_node =  getOrCreateBlog(post.blog_name, _)
-  unique_rel blog_node, post_node, "post", _
+  blog_node = getOrCreateBlog post.blog_name, _
+  post_node = getOrCreateNode "post", "id", _type: "post", id: post.id, type: post.type, timestamp: post.timestamp,_
+  db.query "START blog=node({blog}), post=node({post}) CREATE UNIQUE blog-[:POST]->post",
+           blog: blog_node.id, post: post_node.id, _
   post_node
-
 
 # retry = 0
 #retry = (count, _function) ->
@@ -53,62 +46,63 @@ getOrCreatePost = (post, _)->
 #      return _function.apply(this, args)
 #  _function.apply this, args
 
-
 unique_rel = (a, b, type, _) ->
-  query = db.query("START a=node({a}),b=node({b}) MATCH p=a-[?:" + type + "]->b " +
-                   "CREATE UNIQUE a-[:" + type + "]->b " +
-                   "RETURN not(p <> null) as created",
-                   {a: a.id, b: b.id}, _)
+  query = db.query "START a=node({a}),b=node({b}) MATCH p=a-[?:#{type }]->b " +
+                   "CREATE UNIQUE a-[:#{type}]->b RETURN p=null as created",
+                   a: a.id, b: b.id, _
   query[0].created
 
+add_media = (post_node, data, _)->
+  db.query "START post=node({post}) CREATE UNIQUE post-[:PHOTO]->({data})",
+           post: post_node.id, data: data, _
 
-fetch_post = (_, blog_name, post_id, logger) ->
-  post_node = getNode("post", post_id, _)
+fetch_post = (blog_name, post_id, logger, _) ->
+  try
+    result = db.query("START post=node:post(id={id}) RETURN post", id: post_id, _)[0]
+    post_node = result.post if result
+  catch ignored
   #  return [post_node, 0]  if post_node and new Date().getTime() - post_node.data.last_checked < 12 * 3600000
 
-  post = tumblr.posts(blog_name, post_id, _)
+  post = tumblr.posts blog_name, post_id, _
   return [undefined, 0] unless post
 
   unless post_node?
     post_node = getOrCreatePost(post, _)
     try
       if post.type == 'video'
-        video_node = db.createNode({url: post.thumbnail_url, width: post.thumbnail_width, height: post.thumbnail_height}).save(_)
-        unique_rel(post_node, video_node, "photo")
+        add_media(post_node, {url: post.thumbnail_url, width: post.thumbnail_width, height: post.thumbnail_height}, _)
 
       if post.photos
         for photo in post.photos
-          photo_node = db.createNode(photo.original_size).save(_)
-          unique_rel(post_node, photo_node, "photo")
+          add_media(post_node, photo.original_size, _)
 
-      #    if post.tags
       for tag in post.tags
-        tag_node = getOrCreateNode("tag", tag, {_type: "tag", tag: tag}, _)
-        unique_rel(tag_node, post_node, "tag", _)
+        tag_node = getOrCreateNode "tag", "tag", tag: tag,_
+        unique_rel post_node, tag_node, "TAG", _
+
     catch error
       console.log error.stack
       console.log post
 
       throw error
-  #  add_notes = (post_node, notes, _) ->
   count = 0
 
   for note in post.notes
     blog_node = getOrCreateBlog(note.blog_name, _)
-    count++ if (note.type in ["like", "reblog"]) && unique_rel(blog_node, post_node, note.type, _)
-  #  added
+    count++ if (note.type in ["like", "reblog"]) && unique_rel(blog_node, post_node, note.type.toUpperCase(), _)
 
-  #  count = add_notes post_node, post.notes, _
-  post_node.data.last_checked = new Date().getTime()
+  post_node.data.last_checked = +new Date()
   post_node.save(_)
 
   if post.reblogged_from_id and post.reblogged_from_name
     try
-      [post_reblog_node, count_reblog] = fetch_post(_, post.reblogged_from_name, post.reblogged_from_id, logger)
+      [post_reblog_node, count_reblog] = fetch_post(post.reblogged_from_name, post.reblogged_from_id, logger, _)
       if post_reblog_node
-        unique_rel post_node, post_reblog_node, "is_reblog", _
+        console.log "#{post_node}-[:IS_REBLOG]->#{post_reblog_node}"
+        unique_rel post_node, post_reblog_node, "IS_REBLOG", _
         count += count_reblog
     catch ignored
+      console.log ignored.stack
 
   [post_node, count]
 
@@ -116,25 +110,31 @@ module.exports =
   query: (cypher, params, _)->
     console.log cypher
     console.log params
-    db.query cypher, params, _
+    start = +new Date()
+    try
+      db.query cypher, params, _
+#    for r in res
+#      console.log JSON.stringify(r)
+    finally
+      end = +new Date()
+      console.log end - start
 
   fetch_post: fetch_post
 
-  add_likes: (_, blog, logger) ->
+  add_likes: (blog, logger, _) ->
     blog_node = getOrCreateBlog(blog, _)
     log_id = make_id()
     logger "likes " + blog, log_id, true
 
-    tumblr.fetch_likes _, blog, (_, liked_blog_name, liked_post_id)->
-      logger "likes " + blog + " fetching " + liked_blog_name + "/" + liked_post_id, log_id, true
+    found = tumblr.fetch_likes _, blog, (_, post) ->
+      logger "likes #{blog} fetching #{post.blog_name}/#{post.id}", log_id, true
 
-      [post_node, found] = fetch_post(_, liked_blog_name, liked_post_id, logger)
-      found++ if post_node && unique_rel(blog_node, post_node, "like", _)
+      [post_node, found] = fetch_post post.blog_name, post.id, logger, _
+      found++ if post_node && unique_rel blog_node, post_node, "LIKE", _
       found
 
-    blog_node.data.last_checked = new Date().getTime()
-    blog_node.save(_)
+    blog_node.data.last_checked = +new Date()
+    blog_node.save _
 
-    results = blog_node.outgoing(["like", "post", "reblog"], _)
-    logger "likes " + blog + " " + (results && results.length), log_id, false
+    logger "likes #{blog} #{found}", log_id, false
 

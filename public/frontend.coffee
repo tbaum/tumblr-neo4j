@@ -40,6 +40,7 @@ $(document).ready ->
     if data.message then pre.text data.message else pre.remove()
 
   socket.on "show", (data) ->
+    console.log data
     display = $("#image-display")
     display.html ""
     for key,elements of data

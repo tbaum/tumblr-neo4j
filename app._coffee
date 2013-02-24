@@ -27,23 +27,17 @@ io.sockets.on "connection", (socket, _) ->
   #  stop_it = true
   socket.on "add-likes", (data, _) ->
     try
-      util.add_likes _, data.blog, logger
-      #    results = db.query("START blog=node:blog(blog={blog}) " +
-      #                       "MATCH blog-[:like|reblog|post]->post " +
-      #                       "WHERE post.last_checked? < { checked } " +
-      #                       "RETURN post.blog_name as blog_name,post.id as id",
-      #                       { blog: data.blog, checked: new Date().getTime() - 18000000}, _)
-      #    pool _, results, 2, (_, result)->
-      #      util.fetch_post(_, result.blog_name, result.id, logger)
+      util.add_likes data.blog, logger, _
 
-      results = util.query("START blog=node:blog(blog={blog}) " +
-                           "MATCH blog-[:like|reblog|post]->post<-[:like|reblog|post]-other_blog " +
+      results = util.query("START blog=node:blog(name={blog}) " +
+                           "MATCH blog-[:REBLOG|LIKE|POST]->post<-[:REBLOG|LIKE|POST]-other_blog " +
                            "WHERE other_blog.last_checked? < { checked } " +
-                           "RETURN other_blog.name as name ",
-                           { blog: data.blog, checked: new Date().getTime() - 864000000 }, _)
+                           "RETURN other_blog.name as blog_name ",
+                           blog: data.blog, checked: +new Date() - 864000000, _)
 
       pool _, results, 2, (_, r)->
-        util.add_likes(_, r.name, logger)
+        util.add_likes r.blog_name, logger, _
+
     catch e
       console.log e.stack
       socket.emit "error", e.stack
@@ -51,26 +45,27 @@ io.sockets.on "connection", (socket, _) ->
   socket.on "show-blog", (data, _) ->
     try
       socket.emit "show",
-                  recommend: util.query("START my_blog=node:blog(blog={blog}) " +
-                                        "MATCH my_blog-[:reblog|like|post]->my_post<-[:blog|like|reblog]-other_blog, " +
-                                        " other_blog-[:blog|like|reblog]->post " +
-                                        " ,known_post=(my_blog)-[?:reblog|like|post]->post, pn=(post)-[?:is_reblog]->() WHERE length(pn) <> 1 AND length(known_post) <> 1 " +
-#                                        " WHERE NOT((post)-[:is_reblog]->()) AND NOT( (my_blog)-[:reblog|like|post]->(post) ) " +
-                                        "WITH post,count(*) as c " +
-                                        "MATCH blog-[:post]->post-[:photo]->p " +
+                  recommend: util.query("START my_blog=node:blog(name={blog}) " +
+                                        "MATCH my_blog-[:REBLOG|LIKE|POST]->my_post<-[:REBLOG|LIKE|POST]-other_blog, " +
+                                        " other_blog-[:REBLOG|LIKE|POST]->post " +
+                                        " ,known_post=(my_blog)-[?:REBLOG|LIKE|POST]->post, pn=(post)-[?:IS_REBLOG]->() WHERE length(pn) <> 1 AND length(known_post) <> 1 " +
+#                                        " WHERE NOT((post)-[:IS_REBLOG]->()) AND NOT( (my_blog)-[:REBLOG|LIKE|POST]->(post) ) " +
+                                        "WITH  post,count(*) as c " +
+                                        "MATCH blog-[:POST]->post-[:PHOTO]->p " +
                                         "WHERE has(p.url) " +
                                         "RETURN blog.name as blog_name, post.id as post_id, p.url as url, c ORDER BY c desc limit 20",
-                                        { blog: data.blog }, _)
+#                                        "RETURN collect(blog.blog_name) as blog_name, collect(post.post_id) as post_id, p.url as url, c,   id(post) ORDER BY c desc limit 20",
+                                        blog: data.blog, _)
 
-                  posts: util.query("START my_blog=node:blog(blog={blog}) " +
-                                    "MATCH my_blog-[:reblog|like|post]->(post) " +
-                                    ", pn=(post)-[?:is_reblog]->() WHERE length(pn) <> 1 " +
-#                                    " WHERE NOT((post)-[:is_reblog]->()) " +
+                  posts: util.query("START my_blog=node:blog(name={blog}) " +
+                                    "MATCH my_blog-[:REBLOG|LIKE|POST]->(post) " +
+                                    ", pn=(post)-[?:IS_REBLOG]->() WHERE length(pn) <> 1 " +
+#                                    " WHERE NOT((post)-[:IS_REBLOG]->()) " +
                                     "WITH post,count(*) as c " +
-                                    "MATCH blog-[:post]->post-[:photo]->p " +
+                                    "MATCH blog-[:POST]->post-[:PHOTO]->p " +
                                     "WHERE has(p.url) " +
                                     "RETURN blog.name as blog_name, post.id as post_id, p.url as url, c ORDER BY c desc limit 20",
-                                    { blog: data.blog }, _)
+                                    blog: data.blog, _)
     catch e
       console.log e.stack
       socket.emit "error", e.stack
@@ -78,15 +73,15 @@ io.sockets.on "connection", (socket, _) ->
   socket.on "show-post", (data, _) ->
     try
       socket.emit "show",
-                  post: util.query("START my_post=node:post(post={post}) " +
-                                   "MATCH my_post<-[:blog|like|reblog]-other_blog-[:blog|like|reblog]->post" +
-                                   ", pn=(post)-[?:is_reblog]->() WHERE length(pn) <> 1 " +
-#                                   " WHERE NOT((post)-[:is_reblog]->()) " +
+                  post: util.query("START my_post=node:post(id={post}) " +
+                                   "MATCH my_post<-[:REBLOG|LIKE|POST]-other_blog-[:REBLOG|LIKE|POST]->post" +
+                                   ", pn=(post)-[?:IS_REBLOG]->() WHERE length(pn) <> 1 " +
+#                                   " WHERE NOT((post)-[:IS_REBLOG]->()) " +
                                    "WITH post,count(*) as c " +
-                                   "MATCH blog-[:post]->post-[:photo]->p " +
+                                   "MATCH blog-[:POST]->post-[:PHOTO]->p " +
                                    "WHERE has(p.url) " +
                                    "RETURN blog.name as blog_name, post.id as post_id, p.url as url, c ORDER BY c desc limit 50",
-                                   { post: data.post }, _)
+                                   post: data.post, _)
     catch e
       console.log e.stack
       socket.emit "error", e.stack
